@@ -1,120 +1,87 @@
-# 🧠 AI-Powered Insurance Claims Triage
+# AI Claims Triage Workflow (LangGraph + Claude)
+🔹 Overview 
 
-A simple AI-driven workflow that supports insurance claims operations by structuring claims, checking coverage against policy wording, and recommending operational decisions (approve / escalate / reject) with human review built in.
+Replace your current overview with:
 
----
+## Overview
 
-## 🎯 What this project does
+This project implements a governed AI-assisted claims triage workflow using a state-machine architecture.
 
-This project demonstrates how AI can assist claims handling workflows by:
+The system combines:
+- Claude (Anthropic) for probabilistic decision-making
+- Python for deterministic validation and control logic
+- LangGraph for orchestration of workflow steps
 
-- Structuring unstructured claim inputs (FNOL)
-- Mapping claim facts against policy wording
-- Identifying coverage vs exclusions
-- Recommending triage decisions
-- Supporting (not replacing) human decision-making
+The objective is to demonstrate how AI can support insurance claims operations while maintaining full auditability, control, and human oversight.
+🔹 Architecture 
+## Architecture
 
----
+The workflow is designed as a state machine:
 
-## ⚙️ Workflow Overview
+Claim State → Decision Node → Validation Node → Routing / Human Review
 
-Claim input → structured intake → policy coverage check → decision recommendation → human validation
+### Components
 
----
+- **ClaimState**: Structured claim file evolving across the workflow
+- **decision_node**: Claude evaluates the claim and returns structured JSON
+- **validation_node**: Ensures output integrity and enforces constraints
+- **routing_node**: Applies deterministic business rules
+- **human_review_node**: Escalates sensitive or uncertain claims
 
-## 🧱 Agents
+### Flow Logic
 
-### Intake Agent
-Extracts structured claim data:
-- type of claim
-- cause of loss
-- estimated loss
-- coverage clues
+- All claims are validated before routing
+- Human review is triggered for:
+  - low confidence
+  - unclear claims
+  - sensitive decisions (e.g. rejection)
+🔹 Governance & Controls (THIS IS YOUR EDGE)
+## Governance & Controls
 
-### Policy Agent
-Maps claim facts against policy wording:
-- identifies relevant coverage sections
-- flags applicable exclusions
-- assesses coverage plausibility
+The system enforces multiple control layers:
 
-### Decision Agent
-Recommends:
-- APPROVE
-- ESCALATE
-- REJECT
+- Structured JSON outputs (no free text decisions)
+- Confidence thresholds for decision reliability
+- Validation layer before any operational routing
+- Human-in-the-loop for uncertain or high-risk cases
+- Full audit trail capturing every decision step
 
-Includes:
-- reasoning
-- confidence level
-- human review requirement
-- next operational step
+This ensures compliance with regulated insurance environments (e.g. DORA, EU AI Act principles).
+🔹 Test Cases (NEW SECTION)
+## Test Cases
 
----
+The workflow has been validated using three scenarios:
 
-## 🧪 Example Scenario
+1. **Low-risk claim**
+   - Result: AUTO_PAY
+   - Path: decision → validation → routing
 
-Claim:
-Water damage caused by pipe burst due to corrosion
+2. **Unclear claim**
+   - Result: MANUAL_REVIEW
+   - Path: decision → validation → human_review
 
-Policy:
-Covers water damage but excludes wear and tear, corrosion, and gradual deterioration
+3. **Intentional damage**
+   - Result: REJECT → HUMAN_REVIEW
+   - Path: decision → validation → human_review
+🔹 Insurance Relevance (KEEP BUT UPGRADE)
+## Insurance Relevance
 
-Result:
-Pending investigation / escalate, with human review required
+This workflow mirrors real-world claims operations:
 
----
+- FNOL triage and classification
+- Straight-through processing for low-risk claims
+- Controlled escalation to claims adjusters
+- Auditability for regulatory and internal governance
 
-## 🖥️ Interface
+The system demonstrates how AI can augment, not replace, claims decision-making.
+🔹 Key Insight (VERY IMPORTANT)
+## Key Insight
 
-This project includes a simple Streamlit interface where a user can:
+LLMs provide reasoning, but cannot be trusted as standalone decision systems.
 
-- paste claim text
-- paste policy wording
-- run the triage workflow
-- review intake, policy, and decision outputs
+Control must be enforced through:
+- deterministic validation
+- explicit routing rules
+- human oversight
 
----
-
-## 🛠️ Tech Stack
-
-- Claude API (Anthropic)
-- Python
-- Streamlit
-- Jupyter Notebook
-
----
-
-## 💡 Key Design Principles
-
-- Human-in-the-loop by design
-- Separation of responsibilities across agents
-- Structured and auditable outputs
-- Decision support, not automation of final judgement
-
----
-
-## ⚠️ Disclaimer
-
-This project is a proof of concept.
-
-It is designed to support human review and does not replace claims, legal, compliance, or underwriting judgement.
-
-All claims and policy examples are synthetic and created for demonstration purposes.  
-No real client or proprietary data is used.
-
----
-
-## 🚀 Next Steps
-
-- Add PDF ingestion for claims and policies
-- Add risk scoring
-- Improve audit logs and output standardisation
-- Integrate with claims systems
-
----
-
-## 👤 Author
-
-Marc Planas Callico  
-AI-Enabled Insurance Operations  
-MGA · Lloyd’s · Delegated Authority
+This architecture separates probabilistic AI reasoning from operational decision control.
