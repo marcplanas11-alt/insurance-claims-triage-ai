@@ -1,86 +1,92 @@
-import sys
-from unittest.mock import MagicMock, patch
-
-# Stub out modules before importing app (app calls st.* at module level).
-# button must return False so the triage block doesn't execute on import.
-_st = MagicMock()
-_st.button.return_value = False
-sys.modules["streamlit"] = _st
-sys.modules["anthropic"] = MagicMock()
-
-import app  # noqa: E402
+import app
 
 
-def _make_client(response_text="result"):
-    client = MagicMock()
-    message = MagicMock()
-    message.content = [MagicMock(text=response_text)]
-    client.messages.create.return_value = message
-    return client
+def test_create_initial_state_has_required_fields():
+    state = app.create_initial_state("C1", "Minor scratch on vehicle")
+
+    assert state["claim_id"] == "C1"
+    assert state["claim_text"] == "Minor scratch on vehicle"
+    assert state["decision"] is None
+    assert state["confidence"] is None
+    assert state["human_review_required"] is False
+    assert state["human_review_reason"] is None
+    assert state["human_reviewer"] is None
+    assert state["human_review_status"] is None
+    assert state["audit_log"] == []
 
 
-def test_get_client_passes_api_key():
-    with patch("app.anthropic.Anthropic") as mock_anthropic:
-        app.get_client("test-key-123")
-        mock_anthropic.assert_called_once_with(api_key="test-key-123")
+def test_safe_json_parse_plain_json():
+    raw = '{"decision": "APPROVE", "confidence": 0.85, "reason": "clear low-risk claim"}'
+    parsed = app.safe_json_parse(raw)
+
+    assert parsed["decision"] == "APPROVE"
+    assert parsed["confidence"] == 0.85
 
 
-def test_intake_agent_returns_response():
-    client = _make_client("## Intake\n- Type: Water damage")
-    result = app.intake_agent(client, "Pipe burst in kitchen")
-    assert result == "## Intake\n- Type: Water damage"
+def test_safe_json_parse_markdown_json():
+    raw = """```json
+{
+  "decision": "ESCALATE",
+  "confidence": 0.5,
+  "reason": "unclear claim"
+}
+```"""
+    parsed = app.safe_json_parse(raw)
+
+    assert parsed["decision"] == "ESCALATE"
+    assert parsed["confidence"] == 0.5
 
 
-def test_intake_agent_includes_claim_in_prompt():
-    client = _make_client("ok")
-    app.intake_agent(client, "unique-claim-xyz")
-    prompt = client.messages.create.call_args.kwargs["messages"][0]["content"]
-    assert "unique-claim-xyz" in prompt
+def test_validation_node_accepts_valid_decision():
+    state = app.create_initial_state("C2", "Minor scratch")
+    state["decision"] = "APPROVE"
+    state["confidence"] = 0.85
+    state["decision_reason"] = "Low-risk claim"
+
+    result = app.validation_node(state)
+
+    assert result["is_valid"] is True
+    assert result["validation_errors"] == []
+    assert result["audit_log"][-1]["step"] == "validation_node"
 
 
-def test_intake_agent_uses_correct_model():
-    client = _make_client("ok")
-    app.intake_agent(client, "claim")
-    assert client.messages.create.call_args.kwargs["model"] == "claude-sonnet-4-6"
+def test_validation_node_rejects_invalid_decision_value():
+    state = app.create_initial_state("C3", "Minor scratch")
+    state["decision"] = "MAYBE"
+    state["confidence"] = 0.85
+    state["decision_reason"] = "Invalid decision test"
+
+    result = app.validation_node(state)
+
+    assert result["is_valid"] is False
+    assert "Invalid decision value" in result["validation_errors"]
+    assert result["human_review_required"] is True
 
 
-def test_policy_agent_returns_response():
-    client = _make_client("## Coverage\n- Covered: No")
-    result = app.policy_agent(client, "intake output", "policy wording")
-    assert result == "## Coverage\n- Covered: No"
+def test_human_review_node_sets_review_fields():
+    state = app.create_initial_state("C4", "Unclear claim")
+    state["decision_reason"] = "Claim details unclear"
+    state["human_review_required"] = True
+
+    result = app.human_review_node(state)
+
+    assert result["routing"] == "MANUAL_REVIEW"
+    assert result["final_status"] == "Pending human claims review"
+    assert result["human_review_reason"] == "Claim details unclear"
+    assert result["human_reviewer"] == "claims_adjuster"
+    assert result["human_review_status"] == "PENDING"
+    assert result["audit_log"][-1]["step"] == "human_review_node"
 
 
-def test_policy_agent_includes_intake_and_policy_in_prompt():
-    client = _make_client("ok")
-    app.policy_agent(client, "intake-data-abc", "policy-data-xyz")
-    prompt = client.messages.create.call_args.kwargs["messages"][0]["content"]
-    assert "intake-data-abc" in prompt
-    assert "policy-data-xyz" in prompt
+def test_decide_next_step_routes_to_human_review():
+    state = app.create_initial_state("C5", "Unclear claim")
+    state["human_review_required"] = True
+
+    assert app.decide_next_step(state) == "human_review"
 
 
-def test_decision_agent_returns_response():
-    client = _make_client("ESCALATE\nReason: Corrosion exclusion applies")
-    result = app.decision_agent(client, "intake output", "policy output")
-    assert "ESCALATE" in result
+def test_decide_next_step_routes_to_routing():
+    state = app.create_initial_state("C6", "Clear low-risk claim")
+    state["human_review_required"] = False
 
-
-def test_decision_agent_includes_both_outputs_in_prompt():
-    client = _make_client("APPROVE")
-    app.decision_agent(client, "intake-abc", "policy-xyz")
-    prompt = client.messages.create.call_args.kwargs["messages"][0]["content"]
-    assert "intake-abc" in prompt
-    assert "policy-xyz" in prompt
-
-
-def test_all_agents_use_max_tokens_400():
-    client = _make_client("ok")
-    app.intake_agent(client, "claim")
-    assert client.messages.create.call_args.kwargs["max_tokens"] == 400
-
-    client = _make_client("ok")
-    app.policy_agent(client, "intake", "policy")
-    assert client.messages.create.call_args.kwargs["max_tokens"] == 400
-
-    client = _make_client("ok")
-    app.decision_agent(client, "intake", "policy")
-    assert client.messages.create.call_args.kwargs["max_tokens"] == 400
+    assert app.decide_next_step(state) == "routing"
