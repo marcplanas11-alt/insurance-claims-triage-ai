@@ -1,3 +1,6 @@
 streamlit
 anthropic
-pypdf
+langgraph
+langchain
+langchain-core
+pandas
