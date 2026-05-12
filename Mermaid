@@ -1,0 +1,14 @@
+Claim Input
+↓
+[decision_node]      ← Claude (probabilistic)
+↓
+[validation_node]    ← Python (deterministic)
+↓
+[conditional edge]   ← routes on human_review_required flag
+↙               ↘
+[routing_node]    [human_review_node]
+← Python          ← Python
+↓                  ↓
+AUTO_PAY         MANUAL_REVIEW
+↓                  ↓
+[END]             [END]
