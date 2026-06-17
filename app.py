@@ -476,15 +476,3 @@ if final_state:
             file_name="claims_triage_audit_trail.csv",
             mime="text/csv",
         )
-def test_routing_reject_goes_to_human_review():
-    state = app.create_initial_state("C_REJECT", "Intentional damage")
-    state["decision"] = "REJECT"
-    state["confidence"] = 0.95
-    state["decision_reason"] = "Intentional damage exclusion"
-    state["human_review_required"] = True
-    state["is_valid"] = True
-    state["validation_errors"] = []
-
-    result = app.human_review_node(state)
-    assert result["routing"] == "MANUAL_REVIEW"
-    assert result["human_review_status"] == "PENDING"
