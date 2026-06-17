@@ -1,109 +1,204 @@
-# 🧠 AI Claims Triage Workflow (LangGraph + Claude)
+# AI Claims Triage Workflow — LangGraph + Claude
 
-A governed AI-assisted claims triage workflow built on a state-machine 
-architecture, designed to support insurance claims operations while 
-maintaining auditability, control, and human oversight.
+Governed AI-assisted claims triage workflow built with Streamlit, LangGraph, Python validation logic and Claude.
 
----
-
-## 🔹 Overview
-
-This system combines:
-
-- **Claude (Anthropic)** for probabilistic decision-making
-- **Python** for deterministic validation and control logic
-- **LangGraph** for state-machine orchestration
-
-The objective is to demonstrate how AI can support claims operations while 
-maintaining the auditability, control, and human oversight that regulated 
-insurance workflows require.
+> **Positioning:** this is a portfolio prototype. It does not approve, reject or pay claims in production. It demonstrates how probabilistic model reasoning can be wrapped in deterministic validation, routing controls, audit logging and human review.
 
 ---
 
-## 🔹 Key Insight
+## Executive Summary
 
-LLMs provide reasoning, but cannot be trusted as standalone decision systems.
+Claims triage requires fast first-pass assessment, but regulated insurance workflows cannot rely on an LLM as a standalone decision-maker. This project separates reasoning from control:
 
-Control must be enforced through:
+```text
+Claim text
+   ↓
+Claude decision node
+   ↓
+Python validation node
+   ↓
+Conditional routing
+   ↓                 ↓
+Auto-process path     Human review path
+   ↓                 ↓
+Audit trail           Audit trail
+```
 
-- **Deterministic validation**
-- **Explicit routing rules**
-- **Human oversight**
-
-This architecture deliberately separates probabilistic AI reasoning from 
-operational decision control. The LLM is used in only one node by design — 
-all other nodes are deterministic Python for auditability and predictability.
-
----
-
-## 🔹 Architecture
-### Components
-
-| Component | Type | Role |
-|---|---|---|
-| `ClaimState` | TypedDict | Structured claim file that evolves across every node |
-| `decision_node` | Claude API | Evaluates claim, returns structured JSON with decision + confidence |
-| `validation_node` | Python | Validates output integrity and required field presence |
-| `routing_node` | Python | Applies deterministic business rules for clean claims |
-| `human_review_node` | Python | Escalates sensitive or uncertain claims |
+The LLM proposes `APPROVE`, `REJECT` or `ESCALATE` with a confidence score. Python then validates the output and applies hard governance rules. Rejections, escalations, invalid outputs and low-confidence cases are routed to human review.
 
 ---
 
-## 🔹 Flow Logic
+## Main Files
 
-All claims pass through validation before any routing decision.
-
-Human review is triggered when any of these conditions are met:
-
-- Decision is `REJECT` — no auto-rejection; all rejections require human sign-off
-- Decision is `ESCALATE` — ambiguous, unclear, or complex claims
-- Model-reported confidence falls below **0.7** (configurable in the UI)
-- Validation layer detects missing or malformed fields
-
-Claims reaching `routing_node` are only those where decision is `APPROVE` 
-and confidence ≥ 0.7.
+| File / Folder | Purpose |
+|---|---|
+| `app.py` | Streamlit app, LangGraph workflow, Claude call, validation, routing and audit display |
+| `requirements.txt` | Python dependencies |
+| `tests/test_app.py` | Unit tests for state creation, JSON parsing, validation and routing |
+| `notebooks/claims_langgraph_step_by_step.ipynb` | Learning notebook / step-by-step workflow exploration |
 
 ---
 
-## 🔹 Governance & Controls
+## Governance Controls
 
-The system enforces multiple control layers:
+The workflow enforces:
 
-- **Structured JSON outputs** — no free-text decisions; Claude must return 
-  `APPROVE`, `REJECT`, or `ESCALATE` with a numeric confidence score
-- **Confidence threshold** — default 0.7, adjustable via the Streamlit sidebar
-- **Validation layer** — Python checks output integrity before any routing
-- **Human-in-the-loop** — all rejections and escalations require human review; 
-  no claim is ever auto-rejected
-- **Audit trail** — every node appends to `audit_log`, capturing step name, 
-  decision, confidence, validation status, and routing outcome; exportable as CSV
-
-This architecture is designed to align with the operational principles of 
-**DORA Art. 28** (ICT third-party risk) and **EU AI Act high-risk system 
-requirements** (Arts. 9–15: risk management, data governance, transparency, 
-human oversight, accuracy and robustness).
-
-Production deployment in a regulated environment would require formal 
-conformity assessment, documented risk management system, encrypted persistent 
-audit storage with retention policies, and post-market monitoring — none of 
-which are implemented here.
+- structured JSON output from the model;
+- allowed decisions only: `APPROVE`, `REJECT`, `ESCALATE`;
+- confidence threshold;
+- Python validation before routing;
+- no automatic rejection;
+- human review for rejected, escalated or low-confidence cases;
+- audit log generated at each node;
+- CSV export of the audit trail.
 
 ---
 
-## 🔹 Test Cases
+## Full Setup and Execution Guide
 
-Three scenarios are validated in the test suite and notebook:
-
-| # | Scenario | Claim input | Expected decision | Expected routing | Human review |
-|---|---|---|---|---|---|
-| 1 | Low-risk, clear claim | "Minor scratch on insured vehicle reported with full details" | `APPROVE`, confidence ≥ 0.8 | `AUTO_PAY` | No |
-| 2 | Unclear, ambiguous claim | "Customer reports unusual situation with unclear details" | `ESCALATE` | `MANUAL_REVIEW` | Yes |
-| 3 | Intentional damage | "I intentionally broke my window to test the system." | `REJECT` | `MANUAL_REVIEW` | Yes |
-
-All three scenarios are verified via the notebook (`notebooks/claims_langgraph_step_by_step.ipynb`) 
-with real Claude API outputs.
-
-Unit tests covering state initialisation, JSON parsing, validation logic, 
-routing logic, and human review escalation are in `tests/test_app.py`:
+### 1. Clone the repository
 
 ```bash
+git clone https://github.com/marcplanas11-alt/insurance-claims-triage-ai.git
+cd insurance-claims-triage-ai
+```
+
+### 2. Create a virtual environment
+
+Windows:
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+macOS / Linux:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Install dependencies
+
+```bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+Dependencies:
+
+| Package | Use |
+|---|---|
+| `streamlit` | Browser app |
+| `anthropic` | Claude API client |
+| `langgraph` | State-machine workflow orchestration |
+| `langchain`, `langchain-core` | Supporting LangGraph ecosystem packages |
+| `pandas` | Audit table and CSV export |
+
+---
+
+## Run the Streamlit App
+
+```bash
+streamlit run app.py
+```
+
+Expected output:
+
+```text
+Local URL: http://localhost:8501
+```
+
+In the browser:
+
+1. Enter the API key in the sidebar.
+2. Keep or change the Claude model name.
+3. Adjust the confidence threshold.
+4. Load one of the sample claims or paste a custom claim.
+5. Click **Run Claims Workflow**.
+6. Review the final decision, routing, validation output, human review fields and audit trail.
+
+---
+
+## Run Tests
+
+```bash
+python -m pytest tests/test_app.py
+```
+
+---
+
+## Complete Command Formula
+
+### Windows CMD
+
+```bash
+git clone https://github.com/marcplanas11-alt/insurance-claims-triage-ai.git
+cd insurance-claims-triage-ai
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+### Windows PowerShell
+
+```bash
+git clone https://github.com/marcplanas11-alt/insurance-claims-triage-ai.git
+cd insurance-claims-triage-ai
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+### macOS / Linux
+
+```bash
+git clone https://github.com/marcplanas11-alt/insurance-claims-triage-ai.git
+cd insurance-claims-triage-ai
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+---
+
+## Troubleshooting
+
+### Invalid key error
+
+Check the value entered in the Streamlit sidebar and run the workflow again.
+
+### Model not available
+
+Change the model name in the sidebar to a model available in your account.
+
+### `streamlit` is not recognized
+
+```bash
+python -m streamlit run app.py
+```
+
+### Tests import the Streamlit app
+
+The test suite imports `app.py`, so Streamlit may initialise during test collection. For a future production refactor, move pure workflow functions into a separate module such as `src/workflow.py` and keep `app.py` as UI-only.
+
+---
+
+## Cleanup Notes
+
+- The previous README was incomplete and stopped after an unfinished code block.
+- Test logic should live in `tests/`, not inside `app.py`.
+- Keep real claim data out of the repository; use synthetic examples only.
+
+---
+
+## Author
+
+Built by Marc Planas Callico — Insurance Operations, Business Analysis and AI-enabled transformation.
